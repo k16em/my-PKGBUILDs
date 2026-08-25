@@ -1,0 +1,61 @@
+# Maintainer: kei <mg.gsmdsb@gmail.com>
+
+pkgname=llama-otel-proxy-git
+_pkgname=llama-otel-proxy
+_binname=llamaproxy
+pkgver=r3.gcb4ee44
+pkgrel=1
+pkgdesc='OpenTelemetry-instrumented reverse proxy for OpenAI-compatible APIs (llama-swap)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/k16em/llama-otel-proxy'
+license=('MPL-2.0')
+depends=('glibc')
+makedepends=('git' 'go>=1.27')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+backup=("etc/${_pkgname}/config.yaml")
+source=("${_pkgname}::git+${url}.git"
+        "${_pkgname}.service")
+sha256sums=('SKIP'
+            '5242ed09238f3dac070ab8598f6f767901ce7ec606081f68e9994e2814378c96')
+
+pkgver() {
+	cd "${srcdir}/${_pkgname}"
+	( set -o pipefail
+	  git describe --long --abbrev=7 --tags 2>/dev/null \
+	    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+	  || printf 'r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+	)
+}
+
+prepare() {
+	cd "${srcdir}/${_pkgname}"
+	mkdir -p build
+	go mod download -x
+}
+
+build() {
+	cd "${srcdir}/${_pkgname}"
+	export CGO_CPPFLAGS="${CPPFLAGS}"
+	export CGO_CFLAGS="${CFLAGS}"
+	export CGO_CXXFLAGS="${CXXFLAGS}"
+	export CGO_LDFLAGS="${LDFLAGS}"
+	export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw -ldflags=-linkmode=external"
+	go build -o build ./cmd/llamaproxy
+}
+
+package() {
+	cd "${srcdir}/${_pkgname}"
+
+	install -Dm755 "build/${_binname}" "${pkgdir}/usr/bin/${_binname}"
+
+	install -Dm600 config/config.example.yaml "${pkgdir}/etc/${_pkgname}/config.yaml"
+	install -Dm644 config/config.example.yaml \
+		"${pkgdir}/usr/share/doc/${_pkgname}/config.example.yaml"
+
+	install -Dm644 "${srcdir}/${_pkgname}.service" \
+		"${pkgdir}/usr/lib/systemd/system/${_pkgname}.service"
+
+	install -Dm644 README.md "${pkgdir}/usr/share/doc/${_pkgname}/README.md"
+	install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE"
+}
