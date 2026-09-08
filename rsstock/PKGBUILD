@@ -1,0 +1,60 @@
+# Maintainer: k16em
+
+pkgname=rsstock-git
+_pkgname=rsstock
+pkgver=r6.g9b4e959
+pkgrel=1
+pkgdesc='Fetch RSS/Atom feeds into a local SQLite database and read them as plain text'
+arch=('x86_64')
+url='https://github.com/k16em/rsstock'
+license=('MPL-2.0')
+depends=('glibc' 'libgcc' 'libgcc_s.so')
+makedepends=('git' 'cargo')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=("${_pkgname}::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "${srcdir}/${_pkgname}"
+	( set -o pipefail
+	  git describe --long --abbrev=7 --tags 2>/dev/null \
+	    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+	  || printf 'r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+	)
+}
+
+_srcenv() {
+	export RUSTUP_TOOLCHAIN=stable
+	export CARGO_TARGET_DIR=target
+	export CARGO_PROFILE_RELEASE_DEBUG=2
+	export CARGO_PROFILE_RELEASE_STRIP=false
+	export CARGO_PROFILE_RELEASE_LTO=thin
+	export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+	CFLAGS+=' -ffat-lto-objects'
+}
+
+prepare() {
+	cd "${srcdir}/${_pkgname}"
+	_srcenv
+	cargo fetch --locked --target host-tuple
+}
+
+build() {
+	cd "${srcdir}/${_pkgname}"
+	_srcenv
+	cargo build --frozen --release
+}
+
+check() {
+	cd "${srcdir}/${_pkgname}"
+	_srcenv
+	cargo test --frozen
+}
+
+package() {
+	cd "${srcdir}/${_pkgname}"
+
+	install -Dm755 "target/release/${_pkgname}" "${pkgdir}/usr/bin/${_pkgname}"
+	install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE"
+}
